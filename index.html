@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JWT Encoder & Decoder</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f5f5f5;
+    }
+    .wrap {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    .box {
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    h3 { margin: 0 0 10px; }
+    .section-title {
+        font-weight: bold;
+        margin-bottom: 8px;
+    }
+    .status {
+        padding: 8px;
+        background: #e8f7e8;
+        border-left: 4px solid #2ecc71;
+        margin-bottom: 10px;
+        font-size: 14px;
+    }
+    textarea, input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 8px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        font-family: monospace;
+        box-sizing: border-box;
+    }
+    textarea {
+        height: 160px;
+    }
+    pre {
+        background: #272822;
+        color: #f8f8f2;
+        padding: 15px;
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+    button {
+        margin-top: 12px;
+        padding: 10px;
+        width: 100%;
+        border: none;
+        background: #3498db;
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+    }
+    .mini-btn {
+        padding: 4px 10px;
+        background: #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>JWT Encoder / Decoder</h2>
+
+<div class="wrap">
+
+    <!-- LEFT SIDE: HEADER & PAYLOAD -->
+    <div>
+        <div class="box">
+            <div class="row">
+                <div class="section-title">HEADER: ALGORITHM & TOKEN TYPE</div>
+                <div class="mini-btn" onclick="clearHeader()">CLEAR</div>
+            </div>
+            <div class="status">Valid header</div>
+            <textarea id="headerInput">{ "alg": "HS256", "typ": "JWT" }</textarea>
+        </div>
+
+        <div class="box" style="margin-top:20px">
+            <div class="row">
+                <div class="section-title">PAYLOAD: DATA</div>
+                <div class="mini-btn" onclick="clearPayload()">CLEAR</div>
+            </div>
+            <div class="status">Valid payload</div>
+            <textarea id="payloadInput">{ "sub": "1234567890", "name": "John Doe", "admin": true, "iat": 1516239022 }</textarea>
+        </div>
+
+        <div class="box" style="margin-top:20px">
+            <h3>Private key / Secret</h3>
+            <input id="secretKey" placeholder="Enter secret key (HS256)">
+            <button onclick="encodeJWT()">Encode JWT</button>
+        </div>
+    </div>
+
+
+    <!-- RIGHT SIDE: TOKEN -->
+    <div class="box">
+        <div class="row">
+            <h3>JSON Web Token</h3>
+            <div class="mini-btn" onclick="copyToken()">COPY</div>
+        </div>
+        <textarea id="jwtOutput" placeholder="JWT will appear here..."></textarea>
+
+        <button onclick="decodeJWT()">Decode JWT</button>
+
+        <h3>Decoded Header</h3>
+        <pre id="decodedHeader">{}</pre>
+
+        <h3>Decoded Payload</h3>
+        <pre id="decodedPayload">{}</pre>
+    </div>
+
+</div>
+
+
+<script>
+function clearHeader() {
+    document.getElementById('headerInput').value = "";
+}
+function clearPayload() {
+    document.getElementById('payloadInput').value = "";
+}
+function copyToken() {
+    navigator.clipboard.writeText(document.getElementById("jwtOutput").value);
+    alert("Copied bro!");
+}
+
+function base64UrlEncode(str) {
+    return btoa(str)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+}
+
+function base64UrlDecode(str) {
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = str.length % 4;
+    if (pad) str += "=".repeat(4 - pad);
+    return atob(str);
+}
+
+async function encodeJWT() {
+    try {
+        const header = JSON.stringify(JSON.parse(document.getElementById('headerInput').value));
+        const payload = JSON.stringify(JSON.parse(document.getElementById('payloadInput').value));
+        const secret = document.getElementById('secretKey').value;
+
+        const headerB64 = base64UrlEncode(header);
+        const payloadB64 = base64UrlEncode(payload);
+
+        const data = headerB64 + "." + payloadB64;
+        const key = await crypto.subtle.importKey(
+            "raw",
+            new TextEncoder().encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        );
+
+        const signature = await crypto.subtle.sign(
+            "HMAC",
+            key,
+            new TextEncoder().encode(data)
+        );
+
+        const signatureB64 = base64UrlEncode(
+            String.fromCharCode(...new Uint8Array(signature))
+        );
+
+        const token = `${headerB64}.${payloadB64}.${signatureB64}`;
+        document.getElementById("jwtOutput").value = token;
+
+    } catch (e) {
+        alert("Encode error: " + e);
+    }
+}
+
+function decodeJWT() {
+    const token = document.getElementById("jwtOutput").value.trim();
+    if (!token.includes(".")) return alert("Token invalid!");
+
+    const [h, p] = token.split(".");
+
+    try {
+        document.getElementById("decodedHeader").textContent =
+            JSON.stringify(JSON.parse(base64UrlDecode(h)), null, 4);
+
+        document.getElementById("decodedPayload").textContent =
+            JSON.stringify(JSON.parse(base64UrlDecode(p)), null, 4);
+    } catch (e) {
+        alert("Decode failed: " + e);
+    }
+}
+</script>
+
+</body>
+</html>
